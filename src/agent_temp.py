@@ -1,4 +1,3 @@
-# agent/main.py
 import asyncio
 import logging
 from livekit.agents import (
@@ -26,6 +25,9 @@ current_slide_index = 0
 total_slides = 0
 slides_data = []
 room_context = None
+
+
+# ==================== HELPER FUNCTIONS ====================
 
 
 def get_slide_context(current_idx, slides, window=1):
@@ -69,14 +71,12 @@ async def next_slide():
         current_slide_index += 1
         await update_slide_display()
 
-        # Get new slide content
+        # Get new slide content (shortened for speed)
         slide = slides_data[current_slide_index]
-        content = slide.get("extracted_text", "")
+        content = slide.get("extracted_text", "")[:80]
 
         logger.info(f"✅ Moved to slide {current_slide_index + 1}")
-        return (
-            f"Now on slide {current_slide_index + 1} of {total_slides}. {content[:100]}"
-        )
+        return f"Slide {current_slide_index + 1}/{total_slides}"
     else:
         logger.info("Already on last slide")
         return "Already on the last slide"
@@ -91,14 +91,12 @@ async def previous_slide():
         current_slide_index -= 1
         await update_slide_display()
 
-        # Get new slide content
+        # Get new slide content (shortened for speed)
         slide = slides_data[current_slide_index]
-        content = slide.get("extracted_text", "")
+        content = slide.get("extracted_text", "")[:80]
 
         logger.info(f"✅ Moved to slide {current_slide_index + 1}")
-        return (
-            f"Now on slide {current_slide_index + 1} of {total_slides}. {content[:100]}"
-        )
+        return f"Slide {current_slide_index + 1}/{total_slides}"
     else:
         logger.info("Already on first slide")
         return "Already on the first slide"
@@ -120,12 +118,12 @@ async def goto_slide(slide_number: int):
         current_slide_index = slide_number - 1
         await update_slide_display()
 
-        # Get new slide content
+        # Get new slide content (shortened for speed)
         slide = slides_data[current_slide_index]
-        content = slide.get("extracted_text", "")
+        content = slide.get("extracted_text", "")[:80]
 
         logger.info(f"✅ Jumped to slide {slide_number}")
-        return f"Now on slide {slide_number} of {total_slides}. {content[:100]}"
+        return f"Slide {slide_number}/{total_slides}"
     else:
         logger.warning(f"Invalid slide number: {slide_number}")
         return f"Invalid slide number. Please choose between 1 and {total_slides}"
@@ -208,6 +206,22 @@ async def entrypoint(ctx: JobContext):
 
         logger.info(f"✅ Loaded {total_slides} slides successfully.")
 
+        # DEBUGGING: Log content availability for all slides
+        slides_with_content = 0
+        slides_without_content = []
+        for idx, slide in enumerate(slides_data):
+            content = slide.get("extracted_text", "")
+            if content and content.strip():
+                slides_with_content += 1
+            else:
+                slides_without_content.append(idx + 1)
+
+        logger.info(f"📊 Slides with content: {slides_with_content}/{total_slides}")
+        if slides_without_content:
+            logger.warning(f"⚠️ Slides WITHOUT content: {slides_without_content}")
+        else:
+            logger.info("✅ All slides have extracted text content")
+
         # 4. Initialize LLM and Avatar
         llm = create_llm()
         logger.info("✅ Gemini LLM initialized.")
@@ -215,13 +229,13 @@ async def entrypoint(ctx: JobContext):
         avatar = create_avatar()
         logger.info("✅ Anam Avatar initialized.")
 
-        # 5. Create Agent Session with navigation tools
+        # 5. Create Agent Session with OPTIMIZED settings
         session = AgentSession(
             llm=llm,
             video_sampler=VoiceActivityVideoSampler(speaking_fps=0, silent_fps=0),
             preemptive_generation=False,
-            min_endpointing_delay=2.0,
-            max_endpointing_delay=5.0,
+            min_endpointing_delay=1.5,  # Reduced from 2.0 for faster responses
+            max_endpointing_delay=4.0,  # Reduced from 5.0
         )
         logger.info("✅ Agent session configured.")
 
@@ -229,32 +243,51 @@ async def entrypoint(ctx: JobContext):
         await avatar.start(session, room=ctx.room)
         logger.info("✅ Anam avatar started.")
 
-        presentation_context = (
-            "HERE IS THE FULL PRESENTATION CONTENT YOU ARE PRESENTING:\n"
+        # DIAGNOSTIC: Log system instructions to check for language conflicts
+        logger.info(f"📋 System instructions preview: {SYSTEM_INSTRUCTIONS[:200]}...")
+        if "chinese" in SYSTEM_INSTRUCTIONS.lower() or "中文" in SYSTEM_INSTRUCTIONS:
+            logger.warning(
+                "⚠️ WARNING: SYSTEM_INSTRUCTIONS may contain Chinese language directives!"
+            )
+
+        # CRITICAL: Don't send ALL slides upfront - this causes timeouts
+        # Only send a brief overview
+        presentation_overview = (
+            f"You are presenting a {total_slides}-slide presentation. "
+            "Context for each slide will be provided when needed. "
+            "Listen for navigation commands."
         )
-        for slide in slides:
-            s_num = slide.get("slide_number")
-            s_text = slide.get("extracted_text", "No text content.")
-            presentation_context += f"- Slide {s_num}: {s_text}\n"
-        # Build instructions with navigation capabilities
+
+        # Build SHORT instructions to reduce initial processing time
+        # IMPORTANT: Place language requirement FIRST to override any conflicting system instructions
         presenter_instructions = (
-            "# System instructions\n"
+            "# CRITICAL LANGUAGE REQUIREMENT\n"
+            "YOU MUST ALWAYS SPEAK IN ENGLISH ONLY. NEVER USE CHINESE, SPANISH, OR ANY OTHER LANGUAGE.\n"
+            "IF YOU DETECT YOURSELF SPEAKING IN ANOTHER LANGUAGE, IMMEDIATELY STOP AND SWITCH TO ENGLISH.\n\n"
             f"{SYSTEM_INSTRUCTIONS}\n\n"
-            "## Context\n"
-            f"{presentation_context[:500]}\n\n"
-            "GOAL: Present each slide's content clearly and engagingly.\n"
-            "NAVIGATION: You can control slides using these tools:\n"
-            "- next_slide(): Move to the next slide\n"
-            "- previous_slide(): Move to the previous slide\n"
-            "- goto_slide(N): Jump to slide number N\n"
-            "Listen for user commands like 'next', 'previous', 'go to slide 3', 'stop', etc.\n"
+            "# PRESENTATION CONTEXT\n"
+            f"This is a {total_slides}-slide presentation. "
+            "You will receive specific slide content for each slide.\n\n"
+            "# STRICT BEHAVIORAL RULES\n"
+            "1. LANGUAGE: English only - no exceptions\n"
+            "2. SCOPE: Only discuss content from the current slide provided\n"
+            "3. ACCURACY: Never make up information not in the slide\n"
+            "4. FOCUS: Never discuss topics outside this specific presentation\n"
+            "5. BREVITY: Keep responses to 3-4 sentences maximum\n"
+            "6. TONE: Professional, clear, and engaging\n\n"
+            "# NAVIGATION TOOLS\n"
+            "You can control slides using:\n"
+            "- next_slide(): Move to next slide\n"
+            "- previous_slide(): Move to previous slide\n"
+            "- goto_slide(N): Jump to slide N\n"
+            "Listen for commands like 'next', 'previous', 'go to slide 3'."
         )
 
         # Start session with tools
         await session.start(
             agent=Agent(
                 instructions=presenter_instructions,
-                tools=[next_slide, previous_slide, goto_slide],  # Add navigation tools
+                tools=[next_slide, previous_slide, goto_slide],
             ),
             room=ctx.room,
             room_input_options=room_io.RoomInputOptions(video_enabled=True),
@@ -263,6 +296,9 @@ async def entrypoint(ctx: JobContext):
 
         # 6. Present slides automatically
         logger.info("🎬 Starting presentation sequence.")
+
+        # IMPORTANT: Longer warmup to let LLM initialize properly (prevents first-slide timeout)
+        await asyncio.sleep(5.0)
 
         while current_slide_index < total_slides:
             slide = slides_data[current_slide_index]
@@ -291,20 +327,46 @@ async def entrypoint(ctx: JobContext):
                 continue
 
             try:
-                # Generate speech for slide
+                # OPTIMIZED: Use contextual slides instead of full presentation
                 slide_context = get_slide_context(
                     current_slide_index, slides_data, window=1
                 )
+
+                # CRITICAL: Verify we have content to present
+                if not content_text or content_text.strip() == "":
+                    logger.warning(
+                        f"⚠️ Slide {slide_no} has no extracted text content. Using placeholder."
+                    )
+                    content_text = f"Slide {slide_no} content"
+
+                # Log what we're sending to LLM for debugging
+                logger.info(
+                    f"📝 Slide {slide_no} content length: {len(content_text)} chars"
+                )
+                logger.debug(f"Content preview: {content_text[:100]}...")
+
+                # Generate speech for slide with FULL current slide content
                 slide_instruction = (
-                    f"Slide {slide_no}: {content_text}\n\n"
-                    "Present this slide's key points clearly in 3-4 sentences."
+                    f"{slide_context}\n\n"
+                    "===== YOUR TASK =====\n"
+                    "1. Present ONLY the content from the CURRENT SLIDE marked above\n"
+                    "2. Speak ONLY in English - no other languages allowed\n"
+                    "3. Cover the key points in 3-4 sentences\n"
+                    "4. Do NOT add information not present in the slide\n"
+                    "5. Do NOT discuss unrelated topics\n"
+                    "6. Stay focused on THIS presentation"
                 )
 
-                max_retries = 2
+                # IMPROVED retry mechanism with timeout
+                max_retries = 2  # Reduced from 3 to fail faster
                 speech_handle = None
                 success = False
+
                 for attempt in range(max_retries):
                     try:
+                        logger.info(f"🎤 Attempt {attempt+1} for slide {slide_no}")
+
+                        # CRITICAL: Reset instruction context each attempt to prevent drift
                         fresh_slide_instruction = (
                             f"{slide_context}\n\n"
                             "===== YOUR TASK =====\n"
@@ -315,15 +377,21 @@ async def entrypoint(ctx: JobContext):
                             "5. Do NOT discuss unrelated topics\n"
                             "6. Stay focused on THIS presentation"
                         )
+
                         speech_handle = session.generate_reply(
                             instructions=fresh_slide_instruction
                         )
+
+                        # Add explicit timeout to prevent indefinite hangs
                         await asyncio.wait_for(
-                            speech_handle.wait_for_playout(), timeout=25.0
+                            speech_handle.wait_for_playout(),
+                            timeout=25.0,  # 25 second timeout
                         )
-                        logger.info(f"✅ Completed slide {slide_no}")
+
                         success = True
-                        break
+                        logger.info(f"✅ Completed slide {slide_no}")
+                        break  # Exit retry loop on success
+
                     except asyncio.TimeoutError:
                         logger.warning(
                             f"⏱️ Timeout on attempt {attempt+1} for slide {slide_no}"
@@ -346,7 +414,7 @@ async def entrypoint(ctx: JobContext):
                                 f"❌ All {max_retries} attempts failed for slide {slide_no}"
                             )
 
-                # Check if the presentation was interrupted by the user (e.g., "Stop", "Explain more")
+                # Check if the presentation was interrupted by the user
                 if (
                     speech_handle
                     and hasattr(speech_handle, "interrupted")
@@ -366,7 +434,7 @@ async def entrypoint(ctx: JobContext):
                     current_slide_index += 1
 
             except Exception as e:
-                logger.error(f"❌ Error presenting slide {slide_no}: {e}")
+                logger.error(f"❌ Unexpected error presenting slide {slide_no}: {e}")
                 current_slide_index += 1
                 continue
 
@@ -377,7 +445,11 @@ async def entrypoint(ctx: JobContext):
                 final_speech = session.generate_reply(
                     instructions="Thank you for your attention! I'd be happy to answer questions or navigate to any slide you'd like to review."
                 )
-                await final_speech.wait_for_playout()
+
+                # Add timeout to final message too
+                await asyncio.wait_for(final_speech.wait_for_playout(), timeout=15.0)
+            except asyncio.TimeoutError:
+                logger.warning("⏱️ Final message timed out")
             except Exception as e:
                 logger.error(f"❌ Error in final message: {e}")
 
