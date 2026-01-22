@@ -9,8 +9,10 @@ from livekit.agents import (
     WorkerOptions,
     cli,
     function_tool,
+    JobProcess,
 )
 from livekit.agents.voice import VoiceActivityVideoSampler, room_io
+from livekit.plugins import silero
 from llm.llm import create_llm
 from avatar.anam_avatar import create_avatar
 from avatar.persona import SYSTEM_INSTRUCTIONS
@@ -155,6 +157,16 @@ async def update_slide_display():
         logger.error(f"❌ Failed to update display: {e}")
 
 
+# ==================== PREWARM FUNCTIONS ====================
+def prewarm(proc: JobProcess):
+    proc.userdata["vad"] = silero.VAD.load(
+        min_speech_duration=0.5, min_silence_duration=1.5, activation_threshold=0.7
+    )
+
+
+# ==================== SERVER ENTRYPOINT ====================
+
+
 async def entrypoint(ctx: JobContext):
     """
     Core entrypoint for the AI Agent worker.
@@ -218,6 +230,7 @@ async def entrypoint(ctx: JobContext):
         # 5. Create Agent Session with navigation tools
         session = AgentSession(
             llm=llm,
+            vad=ctx.proc.userdata["vad"],
             video_sampler=VoiceActivityVideoSampler(speaking_fps=0, silent_fps=0),
             preemptive_generation=False,
             min_endpointing_delay=2.0,
@@ -242,6 +255,7 @@ async def entrypoint(ctx: JobContext):
             f"{SYSTEM_INSTRUCTIONS}\n\n"
             "## Context\n"
             f"{presentation_context[:500]}\n\n"
+            "START: Start when you are told 'start', 'begin', with a possible suffix of 'presentation'\n"
             "GOAL: Present each slide's content clearly and engagingly.\n"
             "NAVIGATION: You can control slides using these tools:\n"
             "- next_slide(): Move to the next slide\n"
@@ -260,6 +274,32 @@ async def entrypoint(ctx: JobContext):
             room_input_options=room_io.RoomInputOptions(video_enabled=True),
         )
         logger.info("✅ Agent session started with navigation tools.")
+
+        logger.info("⏳ Priming OpenAI connection (Processing Context)...")
+
+        is_ready = False
+        for i in range(5):  # Try 5 times to establish stable connection
+            try:
+                # Ask a trivial question to force the model to 'digest' the context
+                # We do NOT wait for playout to avoid speaking this to the user,
+                # but we wait for the generation to complete.
+                warmup_handle = session.generate_reply(
+                    instructions="Output the single word 'Ready' to confirm you have read the context."
+                )
+                await asyncio.wait_for(warmup_handle.wait_for_playout(), timeout=20.0)
+                logger.info("✅ Connection Primed! Model is ready.")
+                is_ready = True
+                break
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Priming attempt {i+1} failed: {e}. Retrying in 2s..."
+                )
+                await asyncio.sleep(2.0)
+
+        if not is_ready:
+            logger.error(
+                "❌ Failed to prime connection. proceeding anyway but expect errors."
+            )
 
         # 6. Present slides automatically
         logger.info("🎬 Starting presentation sequence.")
@@ -421,6 +461,7 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             drain_timeout=1800,  # 30 minutes
         )
     )
