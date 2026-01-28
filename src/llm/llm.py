@@ -1,7 +1,7 @@
 # app/llm/gemini.py
 from livekit.plugins import google, openai
-from config import GEMINI_API_KEY, OPENAI_API_KEY
-from avatar.persona import SYSTEM_INSTRUCTIONS
+from ..config import GEMINI_API_KEY, OPENAI_API_KEY
+from ..avatar.persona import SYSTEM_INSTRUCTIONS
 
 
 def create_llm():

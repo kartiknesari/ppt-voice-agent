@@ -13,11 +13,11 @@ from livekit.agents import (
 )
 from livekit.agents.voice import VoiceActivityVideoSampler, room_io
 from livekit.plugins import silero
-from llm.llm import create_llm
-from avatar.anam_avatar import create_avatar
-from avatar.persona import SYSTEM_INSTRUCTIONS
-from utils.safety import keep_alive
-from core.supabase import supabase
+from .llm.llm import create_llm
+from .avatar.anam_avatar import create_avatar
+from .avatar.persona import SYSTEM_INSTRUCTIONS
+from .utils.safety import keep_alive
+from .core.supabase import supabase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dia-presenter-agent")

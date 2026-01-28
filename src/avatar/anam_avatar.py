@@ -1,5 +1,5 @@
 from livekit.plugins import anam, simli
-from config import ANAM_API_KEY, ANAM_AVATAR_ID, SIMLI_API_KEY, SIMLI_FACE_ID
+from ..config import ANAM_API_KEY, ANAM_AVATAR_ID, SIMLI_API_KEY, SIMLI_FACE_ID
 
 
 def create_avatar():

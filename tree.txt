@@ -1,0 +1,45 @@
+Folder PATH listing for volume Windows
+Volume serial number is 204F-DDA9
+A:.
+¦   agent.py
+¦   agent_temp.py
+¦   config.py
+¦   __init__.py
+¦   
++---avatar
+¦   ¦   anam_avatar.py
+¦   ¦   persona.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           anam_avatar.cpython-313.pyc
+¦           persona.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---core
+¦   ¦   supabase.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           supabase.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---llm
+¦   ¦   llm.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           llm.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---utils
+¦   ¦   safety.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           safety.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---__pycache__
+        config.cpython-313.pyc
+        
