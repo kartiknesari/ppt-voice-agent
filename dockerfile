@@ -16,12 +16,12 @@ ENV PYTHONUNBUFFERED=1
 # See https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#user
 ARG UID=10001
 RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/app" \
-    --shell "/sbin/nologin" \
-    --uid "${UID}" \
-    appuser
+  --disabled-password \
+  --gecos "" \
+  --home "/app" \
+  --shell "/sbin/nologin" \
+  --uid "${UID}" \
+  appuser
 
 # Install build dependencies required for Python packages with native extensions
 # gcc: C compiler needed for building Python packages with C extensions
@@ -29,9 +29,10 @@ RUN adduser \
 # python3-dev: Python development headers needed for compilation
 # We clean up the apt cache after installation to keep the image size down
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    python3-dev \
+  gcc \
+  g++ \
+  python3-dev \
+  ffmpeg\
   && rm -rf /var/lib/apt/lists/*
 
 # Create a new directory for our application code
@@ -46,9 +47,9 @@ RUN mkdir -p src
 # --locked ensures we use exact versions from uv.lock for reproducible builds
 # This creates a virtual environment and installs all dependencies
 # Ensure your uv.lock file is checked in for consistency across environments
-RUN uv sync --locked
+RUN uv sync --locked --no-install-project
 
-# Copy all remaining pplication files into the container
+# Copy all remaining application files into the container
 # This includes source code, configuration files, and dependency specifications
 # (Excludes files specified in .dockerignore)
 COPY . .
@@ -64,9 +65,9 @@ USER appuser
 # Pre-download any ML models or files the agent needs
 # This ensures the container is ready to run immediately without downloading
 # dependencies at runtime, which improves startup time and reliability
-RUN uv run "src/agent.py" download-files
+RUN uv run python -m "src.agent" download-files
 
 # Run the application using UV
 # UV will activate the virtual environment and run the agent.
 # The "start" command tells the worker to connect to LiveKit and begin waiting for jobs.
-CMD ["uv", "run", "src/agent.py", "start"]
+CMD ["uv", "run", "python", "-m", "src.agent", "start"]

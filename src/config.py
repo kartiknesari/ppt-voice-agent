@@ -52,8 +52,11 @@ class Config:
 # 1. Create the configuration instance
 _config = Config()
 
-# 2. Run validation immediately on startup
-_config.validate()
+
+# 2. Validation function to be called at runtime
+def validate_config():
+    _config.validate()
+
 
 # 3. Export variables as constants for easy importing in other files
 LIVEKIT_URL = _config.LIVEKIT_URL

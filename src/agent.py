@@ -13,9 +13,10 @@ from livekit.agents import (
 )
 from livekit.agents.voice import VoiceActivityVideoSampler, room_io
 from livekit.plugins import silero
+from .config import validate_config
 from .llm.llm import create_llm
 from .avatar.anam_avatar import create_avatar
-from .avatar.persona import SYSTEM_INSTRUCTIONS
+from .llm.persona import SYSTEM_INSTRUCTIONS
 from .utils.safety import keep_alive
 from .core.supabase import supabase
 
@@ -173,6 +174,7 @@ async def entrypoint(ctx: JobContext):
     """
     global current_slide_index, total_slides, slides_data, room_context
 
+    validate_config()
     logger.info(f"🚀 Initializing agent for room: {ctx.room.name}")
 
     session = None
@@ -200,6 +202,8 @@ async def entrypoint(ctx: JobContext):
 
         # 3. Load slides from Supabase
         logger.info(f"🔍 Querying slides for: {presentation_id}")
+        if supabase is None:
+            raise Exception("Supabase connection error")
         query_result = (
             supabase.table("slides")
             .select("*")
@@ -255,7 +259,6 @@ async def entrypoint(ctx: JobContext):
             f"{SYSTEM_INSTRUCTIONS}\n\n"
             "## Context\n"
             f"{presentation_context[:500]}\n\n"
-            "START: Start when you are told 'start', 'begin', with a possible suffix of 'presentation'\n"
             "GOAL: Present each slide's content clearly and engagingly.\n"
             "NAVIGATION: You can control slides using these tools:\n"
             "- next_slide(): Move to the next slide\n"
